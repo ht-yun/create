@@ -1,5 +1,7 @@
 import type { StoryDetail, StorySummary } from "@/shared/story-contract";
-import { eveningBreezeGraph, rainVisitorGraph } from "@/backend/src/stories/sample-stories";
+import { rainVisitorGraph } from "@/backend/src/stories/sample-stories";
+import { mistCatchGraph } from "./mist-catch-story";
+import { eveningBreezeWebGraph } from "./evening-breeze-web-story";
 
 const updatedAt = "2026-07-16T08:00:00.000Z";
 
@@ -36,7 +38,26 @@ export const demoStories: StoryDetail[] = [
     playCount: 31720,
     score: 9.7,
     updatedAt,
-    graph: eveningBreezeGraph,
+    coverUrl: "/story-assets/evening-breeze/L-00%20%E4%BD%9C%E5%93%81%E4%B8%BB%E5%B0%81%E9%9D%A2.png",
+    graph: eveningBreezeWebGraph,
+  },
+  {
+    id: "demo-mist-catch",
+    slug: "mist-catch-last-lamp",
+    title: "雾港追捕：最后一盏灯",
+    summary: "年轻民警林峥追捕惯偷周骁，在证据、同情、程序正义和群众安全之间作出选择。你会相信他关于重病母亲的说法吗？",
+    authorName: "折枝编辑部",
+    tags: ["刑侦", "悬疑", "追捕", "多结局"],
+    visibility: "public",
+    status: "published",
+    estimatedMinutes: 35,
+    endingCount: 5,
+    favoriteCount: 0,
+    playCount: 0,
+    score: 0,
+    updatedAt,
+    coverUrl: "/story-assets/optimized/mist-catch/%E3%80%8A%E9%9B%BE%E6%B8%AF%E8%BF%BD%E6%8D%95%EF%BC%9A%E6%9C%80%E5%90%8E%E4%B8%80%E7%9B%8F%E7%81%AF%E3%80%8B.webp",
+    graph: mistCatchGraph,
   },
 ];
 

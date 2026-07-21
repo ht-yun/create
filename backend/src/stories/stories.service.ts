@@ -4,6 +4,7 @@ import type { StoryDetail, StoryGraph, StoryStatus, StorySummary, StoryVisibilit
 import { DatabaseService } from "../database/database.service.js";
 import type { AuthenticatedUser } from "../auth/auth.types.js";
 import { createStorySchema, updateStorySchema } from "./story.validation.js";
+import { ImageVariantService } from "./image-variant.service.js";
 
 interface StoryRow {
   id: string;
@@ -27,7 +28,7 @@ interface StoryRow {
 
 @Injectable()
 export class StoriesService {
-  constructor(@Inject(DatabaseService) private readonly database: DatabaseService) {}
+  constructor(@Inject(DatabaseService) private readonly database: DatabaseService, @Inject(ImageVariantService) private readonly imageVariants: ImageVariantService) {}
 
   async listPublic(search = "", sort: "popular" | "latest" | "score" = "popular") {
     const order = sort === "latest" ? "published_at DESC NULLS LAST" : sort === "score" ? "score DESC, play_count DESC" : "play_count DESC, favorite_count DESC";
@@ -48,7 +49,14 @@ export class StoriesService {
     const isOwner = viewer?.id === row.author_id;
     if (row.visibility === "private" && !isOwner) throw new NotFoundException("作品不存在");
     if (row.status !== "published" && !isOwner) throw new NotFoundException("作品不存在");
-    return { ...this.toSummary(row), graph: row.graph };
+    return { ...this.toSummary(row), graph: await this.imageVariants.enrichGraph(row.graph) };
+  }
+
+  async getById(id: string, user: AuthenticatedUser): Promise<StoryDetail> {
+    const result = await this.database.query<StoryRow>("SELECT * FROM stories WHERE id=$1 AND author_id=$2", [id, user.id]);
+    const row = result.rows[0];
+    if (!row) throw new NotFoundException("作品不存在");
+    return { ...this.toSummary(row), graph: await this.imageVariants.enrichGraph(row.graph) };
   }
 
   async listMine(user: AuthenticatedUser) {

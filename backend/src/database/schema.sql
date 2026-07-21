@@ -56,6 +56,39 @@ CREATE TABLE IF NOT EXISTS stories (
 CREATE INDEX IF NOT EXISTS stories_public_idx ON stories(status, visibility, published_at DESC);
 CREATE INDEX IF NOT EXISTS stories_author_idx ON stories(author_id, updated_at DESC);
 
+CREATE TABLE IF NOT EXISTS story_assets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  story_id uuid NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+  kind text NOT NULL CHECK (kind IN ('image', 'audio', 'video')),
+  original_name text NOT NULL,
+  mime_type text NOT NULL,
+  size bigint NOT NULL DEFAULT 0,
+  storage_key text,
+  source_url text,
+  sha256 text NOT NULL DEFAULT '',
+  status text NOT NULL DEFAULT 'ready' CHECK (status IN ('pending', 'ready', 'failed')),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS story_assets_story_idx ON story_assets(story_id, created_at);
+
+CREATE TABLE IF NOT EXISTS story_asset_variants (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  asset_id uuid NOT NULL REFERENCES story_assets(id) ON DELETE CASCADE,
+  purpose text NOT NULL CHECK (purpose IN ('playback')),
+  mime_type text NOT NULL,
+  width integer,
+  height integer,
+  size bigint NOT NULL DEFAULT 0,
+  storage_key text,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'ready', 'failed')),
+  error_message text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (asset_id, purpose)
+);
+
+CREATE INDEX IF NOT EXISTS story_asset_variants_asset_idx ON story_asset_variants(asset_id, purpose);
+
 CREATE TABLE IF NOT EXISTS favorites (
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   story_id uuid NOT NULL REFERENCES stories(id) ON DELETE CASCADE,

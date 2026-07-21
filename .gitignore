@@ -47,4 +47,5 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+.data/
 web-dev*.log

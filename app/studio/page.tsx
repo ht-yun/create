@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, BookOpenCheck, Boxes, CirclePlus, Clock3, FileText, ImagePlus, MoreHorizontal, Play, Sparkles, WandSparkles } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { StoryPackageActions } from "@/components/story-package-actions";
 
 export const metadata = { title: "创作中心" };
 
@@ -13,6 +14,7 @@ const modes = [
 export default function StudioPage() {
   return (
     <AppShell active="studio"><div className="page-wrap studio-page">
+      <StoryPackageActions />
       <header className="workshop-header"><div><span className="eyebrow">CREATOR STUDIO</span><h1>创作中心</h1><p>把文字、声音和画面连接成可以亲自走过的故事。</p></div><Link href="/studio/editor" className="button primary"><CirclePlus size={17} />新建作品</Link></header>
       <section className="studio-overview"><div><span>草稿</span><strong>2</strong><small>1 部本周有更新</small></div><div><span>已发布</span><strong>0</strong><small>完成首作后会显示在这里</small></div><div><span>总体验</span><strong>—</strong><small>发布后开始统计</small></div><div className="studio-tip"><BookOpenCheck size={21} /><p><strong>创作提示</strong>先写出主线，再补充分支；每个选择都应该让体验者知道自己在为什么做决定。</p></div></section>
       <section className="content-section flush"><div className="section-heading"><div><span className="eyebrow">START HERE</span><h2>选择创作方式</h2><p>模式只改变编辑体验，不会限制作品功能，可随时升级。</p></div></div><div className="mode-grid">{modes.map((mode) => { const Icon = mode.icon; return <Link href={`/studio/editor?mode=${mode.level}`} className="mode-card" key={mode.level}><span className="mode-level">{mode.level}</span><Icon size={25} /><h3>{mode.title}</h3><p>{mode.description}</p><small>{mode.meta}</small><ArrowRight size={18} /></Link>; })}</div></section>

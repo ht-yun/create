@@ -30,12 +30,71 @@ export interface StoryChoice {
   targetNodeId: string;
   changes?: VariableChange[];
   conditions?: StoryCondition[];
+  feedback?: string;
+  importance?: "normal" | "key";
 }
 
 export interface StoryMedia {
   kind: "image" | "audio" | "video";
   url: string;
+  playbackUrl?: string;
   alt?: string;
+  role?: "scene" | "music" | "ambience" | "voice" | "effect";
+  loop?: boolean;
+  volume?: number;
+  posterUrl?: string;
+  focalPoint?: { x: number; y: number };
+}
+
+export interface StoryPackageAsset {
+  id: string;
+  kind: StoryMedia["kind"];
+  path?: string;
+  url?: string;
+  mime?: string;
+  size?: number;
+  sha256?: string;
+  originalName?: string;
+}
+
+export interface StoryPackage {
+  format: "interactive-story";
+  formatVersion: 1;
+  story: {
+    title: string;
+    summary: string;
+    authorName?: string;
+    tags: string[];
+    estimatedMinutes?: number;
+    coverUrl?: string;
+    graph: StoryGraph;
+  };
+  assets: StoryPackageAsset[];
+}
+
+export interface StoryPackageManifest {
+  format: "interactive-story-pack";
+  formatVersion: 1;
+  files: Array<StoryPackageAsset & { path: string; mime: string; size: number; sha256: string }>;
+}
+
+export interface StoryImportError {
+  path: string;
+  code: string;
+  message: string;
+}
+
+export interface StoryImportReport {
+  valid: boolean;
+  errors: StoryImportError[];
+  warnings: string[];
+  story?: Pick<StoryPackage["story"], "title" | "summary" | "authorName" | "tags" | "estimatedMinutes"> & {
+    nodeCount: number;
+    variableCount: number;
+    endingCount: number;
+    assetCount: number;
+    totalSize: number;
+  };
 }
 
 export interface StoryNode {
@@ -49,6 +108,10 @@ export interface StoryNode {
   nextNodeId?: string;
   endingKey?: string;
   position?: { x: number; y: number };
+  presentation?: {
+    transition?: "fade" | "dissolve" | "cut";
+    textReveal?: "paragraph" | "instant";
+  };
 }
 
 export interface StoryGraph {

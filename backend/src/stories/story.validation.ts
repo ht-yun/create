@@ -32,6 +32,7 @@ export const graphSchema = z.object({
     media: z.array(z.object({
       kind: z.enum(["image", "audio", "video"]),
       url: z.string().max(2048),
+      playbackUrl: z.string().max(2048).optional(),
       alt: z.string().max(200).optional(),
     })).optional(),
     choices: z.array(z.object({
