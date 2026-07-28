@@ -34,6 +34,11 @@ export const graphSchema = z.object({
       url: z.string().max(2048),
       playbackUrl: z.string().max(2048).optional(),
       alt: z.string().max(200).optional(),
+      role: z.enum(["scene", "music", "ambience", "voice", "effect"]).optional(),
+      loop: z.boolean().optional(),
+      volume: z.number().min(0).max(1).optional(),
+      posterUrl: z.string().max(2048).optional(),
+      focalPoint: z.object({ x: z.number(), y: z.number() }).optional(),
     })).optional(),
     choices: z.array(z.object({
       id: z.string().min(1),
@@ -41,10 +46,16 @@ export const graphSchema = z.object({
       targetNodeId: z.string().min(1),
       changes: z.array(change).optional(),
       conditions: z.array(condition).optional(),
+      feedback: z.string().max(500).optional(),
+      importance: z.enum(["normal", "key"]).optional(),
     })).optional(),
     nextNodeId: z.string().optional(),
     endingKey: z.string().optional(),
     position: z.object({ x: z.number(), y: z.number() }).optional(),
+    presentation: z.object({
+      transition: z.enum(["fade", "dissolve", "cut"]).optional(),
+      textReveal: z.enum(["paragraph", "instant"]).optional(),
+    }).optional(),
   })).min(1).max(5000),
 }).superRefine((graph, context) => {
   const ids = new Set(graph.nodes.map((node) => node.id));

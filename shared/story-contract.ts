@@ -142,3 +142,38 @@ export interface StorySummary {
 export interface StoryDetail extends StorySummary {
   graph: StoryGraph;
 }
+
+export type StoryNarrationNodeState = "missing" | "pending" | "ready" | "failed" | "stale" | "manual";
+
+export interface StoryNarrationSettings {
+  voiceId: string;
+  speed: number;
+  volume: number;
+}
+
+export interface StoryNarrationNodeStatus {
+  nodeId: string;
+  title: string;
+  status: StoryNarrationNodeState;
+  errorMessage?: string;
+  updatedAt?: string;
+}
+
+export interface StoryNarrationStatus {
+  configured: boolean;
+  provider: string;
+  settings: StoryNarrationSettings;
+  nodes: StoryNarrationNodeStatus[];
+}
+
+export interface StoryNarrationJob {
+  id: string;
+  status: "queued" | "processing" | "completed" | "failed";
+  totalNodes: number;
+  completedNodes: number;
+  failedNodes: number;
+  errorMessage?: string;
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+}

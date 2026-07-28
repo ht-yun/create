@@ -13,6 +13,7 @@ import { SessionGuard } from "../auth/session.guard.js";
 import { StoriesService } from "./stories.service.js";
 import { StoryPackageService } from "./story-package.service.js";
 import { ImageVariantService } from "./image-variant.service.js";
+import { NarrationService, type GenerateOptions } from "./narration.service.js";
 
 const storyImportInterceptor = FileInterceptor("file", {
   storage: diskStorage({
@@ -29,7 +30,7 @@ const storyImportInterceptor = FileInterceptor("file", {
 @ApiTags("stories")
 @Controller("stories")
 export class StoriesController {
-  constructor(@Inject(StoriesService) private readonly stories: StoriesService, @Inject(StoryPackageService) private readonly packages: StoryPackageService, @Inject(ImageVariantService) private readonly imageVariants: ImageVariantService, @Inject(AuthService) private readonly auth: AuthService) {}
+  constructor(@Inject(StoriesService) private readonly stories: StoriesService, @Inject(StoryPackageService) private readonly packages: StoryPackageService, @Inject(ImageVariantService) private readonly imageVariants: ImageVariantService, @Inject(NarrationService) private readonly narration: NarrationService, @Inject(AuthService) private readonly auth: AuthService) {}
 
   @Get()
   list(@Query("search") search = "", @Query("sort") sort = "popular") {
@@ -102,6 +103,30 @@ export class StoriesController {
   @UseGuards(SessionGuard)
   update(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedRequest) {
     return this.stories.update(id, body, request.user);
+  }
+
+  @Post(":id/narration/generate")
+  @UseGuards(SessionGuard)
+  generateNarration(@Param("id") id: string, @Body() body: GenerateOptions, @Req() request: AuthenticatedRequest) {
+    return this.narration.createJob(id, request.user, body);
+  }
+
+  @Post(":id/nodes/:nodeId/narration/generate")
+  @UseGuards(SessionGuard)
+  generateNodeNarration(@Param("id") id: string, @Param("nodeId") nodeId: string, @Body() body: GenerateOptions, @Req() request: AuthenticatedRequest) {
+    return this.narration.createJob(id, request.user, { ...body, nodeIds: [nodeId] });
+  }
+
+  @Get(":id/narration/jobs/:jobId")
+  @UseGuards(SessionGuard)
+  narrationJob(@Param("id") id: string, @Param("jobId") jobId: string, @Req() request: AuthenticatedRequest) {
+    return this.narration.getJob(id, jobId, request.user);
+  }
+
+  @Get(":id/narration/status")
+  @UseGuards(SessionGuard)
+  narrationStatus(@Param("id") id: string, @Req() request: AuthenticatedRequest) {
+    return this.narration.getStatus(id, request.user);
   }
 
   @Post(":slug/favorite")

@@ -2,6 +2,7 @@ import type { StoryDetail, StorySummary } from "@/shared/story-contract";
 import { rainVisitorGraph } from "@/backend/src/stories/sample-stories";
 import { mistCatchGraph } from "./mist-catch-story";
 import { eveningBreezeWebGraph } from "./evening-breeze-web-story";
+import { afterSchoolWindGraph } from "./after-school-wind-story";
 
 const updatedAt = "2026-07-16T08:00:00.000Z";
 
@@ -40,6 +41,24 @@ export const demoStories: StoryDetail[] = [
     updatedAt,
     coverUrl: "/story-assets/evening-breeze/L-00%20%E4%BD%9C%E5%93%81%E4%B8%BB%E5%B0%81%E9%9D%A2.png",
     graph: eveningBreezeWebGraph,
+  },
+  {
+    id: "demo-after-school-wind",
+    slug: "after-school-wind",
+    title: "晚自习后的风",
+    summary: "小县城高中里，两个普通同学在学习、家庭期待和慢慢靠近的感情之间，学着为自己的人生做决定。",
+    authorName: "南栀",
+    tags: ["青春", "校园", "恋爱", "多结局"],
+    visibility: "public",
+    status: "published",
+    estimatedMinutes: 35,
+    endingCount: 11,
+    favoriteCount: 0,
+    playCount: 0,
+    score: 0,
+    updatedAt,
+    coverUrl: "/story-assets/after-school-wind/%E6%99%9A%E8%87%AA%E4%B9%A0%E5%90%8E%E7%9A%84%E9%A3%8E.png",
+    graph: afterSchoolWindGraph,
   },
   {
     id: "demo-mist-catch",

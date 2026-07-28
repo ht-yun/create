@@ -1,4 +1,4 @@
-import type { StoryGraph, StoryMedia } from "@/shared/story-contract";
+import type { StoryGraph, StoryMedia, StoryNode } from "@/shared/story-contract";
 
 const mistImage = (filename: string, alt: string): StoryMedia => ({
   kind: "image",
@@ -11,9 +11,9 @@ const sceneMedia = (filename: string, alt: string, extras: StoryMedia[] = []) =>
 const environment = (filename: string, alt: string) => mistImage(filename, alt);
 const evidence = (filename: string, alt: string) => mistImage(filename, alt);
 
-export const mistCatchGraph: StoryGraph = {
+const mistCatchBaseGraph: StoryGraph = {
   version: 1,
-  startNodeId: "N01",
+  startNodeId: "INTRO",
   variables: [
     { key: "justice", label: "正义判断", type: "number", initialValue: 0, min: 0, max: 10 },
     { key: "responsibility", label: "责任心", type: "number", initialValue: 0, min: 0, max: 10 },
@@ -22,6 +22,16 @@ export const mistCatchGraph: StoryGraph = {
     { key: "public_risk", label: "公共风险", type: "number", initialValue: 0, min: 0, max: 10 },
   ],
   nodes: [
+    {
+      id: "INTRO",
+      type: "scene",
+      title: "凌晨一点四十分",
+      speaker: "案件提示",
+      content: "你将以年轻民警林峥的视角，参与雾港老城区的一起入室盗窃案。\n\n被盗物品包括现金、贵重药品和一只手提箱。嫌疑人周骁擅长伪装、制造假线索和利用他人的同情。你的任务不只是追上他，还要保护群众、保存证据，并在每一次行动中遵守程序。\n\n案发地点：临江里弄17号。嫌疑人可能仍在老城区。",
+      media: sceneMedia("《雾港追捕：最后一盏灯》.png", "雨夜中的雾港追捕", [environment("L01 雾港老城区环境.png", "大雨中的雾港老城区")]),
+      nextNodeId: "N01",
+      presentation: { transition: "dissolve", textReveal: "paragraph" },
+    },
     {
       id: "N01", type: "scene", title: "雨夜失窃", speaker: "林峥",
       content: "凌晨一点四十分，雾港下着大雨。临江里弄17号发生入室盗窃，现金、药品和一只手提箱不见了。门锁没有损坏，玄关却留着一只沾满黑泥、明显不合脚的运动鞋。赵敏蹲在门边提醒你：真正的线索，往往不是嫌疑人想让我们看到的那一条。",
@@ -162,7 +172,7 @@ export const mistCatchGraph: StoryGraph = {
       media: sceneMedia("N15 楼顶的边界.png", "楼顶上保持的安全边界", [environment("L04 居民楼楼顶与消防通道.png", "可供逃离的消防通道")]),
       choices: [
         { id: "N15-A", label: "继续解释程序，让他坐到安全位置", targetNodeId: "N16", changes: [{ key: "justice", operation: "add", value: 2 }, { key: "responsibility", operation: "add", value: 1 }] },
-        { id: "N15-B", label: "告诉他再闹就别想见母亲", targetNodeId: "N17", changes: [{ key: "justice", operation: "subtract", value: 1 }, { key: "public_risk", operation: "add", value: 1 }] },
+        { id: "N15-B", label: "告诉他再闹就别想见母亲", targetNodeId: "N17B", changes: [{ key: "justice", operation: "subtract", value: 1 }, { key: "public_risk", operation: "add", value: 1 }] },
       ],
     },
     {
@@ -170,18 +180,28 @@ export const mistCatchGraph: StoryGraph = {
       content: "社区和医院先后回电：何桂兰没有住院，也没有急诊记录。电话接通后，她疲惫地问：“是不是周骁又闯祸了？”她完全不知道儿子正在逃亡，只知道他前几天拿走了身份证，说要去找工作。周骁的谎言被当场拆穿。",
       media: sceneMedia("N16 没有住院的母亲.png", "何桂兰得知真相", [environment("L08 何桂兰家与老楼楼道.png", "何桂兰的家"), evidence("P04 何桂兰家的门.png", "被借用身份信息的住处")]),
       choices: [
-        { id: "N16-A", label: "揭穿谎言，但不羞辱周骁", targetNodeId: "N17", changes: [{ key: "deception_exposure", operation: "add", value: 3 }, { key: "justice", operation: "add", value: 1 }] },
-        { id: "N16-B", label: "先告诉何桂兰警方会保护她", targetNodeId: "N17", changes: [{ key: "responsibility", operation: "add", value: 2 }, { key: "justice", operation: "add", value: 1 }] },
+        { id: "N16-A", label: "揭穿谎言，但不羞辱周骁", targetNodeId: "N17B", changes: [{ key: "deception_exposure", operation: "add", value: 3 }, { key: "justice", operation: "add", value: 1 }] },
+        { id: "N16-B", label: "先告诉何桂兰警方会保护她", targetNodeId: "N17B", changes: [{ key: "responsibility", operation: "add", value: 2 }, { key: "justice", operation: "add", value: 1 }] },
       ],
     },
     {
-      id: "N17", type: "scene", title: "谎言逃亡", speaker: "林峥",
-      content: "如果你允许周骁回家，他会故意放慢脚步，声称钥匙在邻居那里，又说母亲可能已经晕倒。当你靠近房门时，他突然用肩膀撞开消防通道门，翻过低矮围墙，跳到下一栋楼的雨棚上。他没有攻击你，只留下一句：“我真的只是想回去看她。”",
+      id: "N17", type: "scene", title: "谎言得逞", speaker: "林峥",
+      content: "你同意在押送前陪周骁回家。他故意在楼道里放慢脚步，先说钥匙在邻居那里，又突然喊母亲可能晕倒。\n\n当你靠近房门确认情况时，他用肩膀撞开消防通道门，翻过低矮围墙，跳到下一栋楼的雨棚上。所谓探望母亲，从一开始就是为了把警方带进他熟悉的逃跑路线。",
       media: sceneMedia("N17 谎言逃亡.png", "周骁从消防通道逃离", [environment("L04 居民楼楼顶与消防通道.png", "雨夜的消防通道")]),
       choices: [
         { id: "N17-A", label: "独自翻墙追下去", targetNodeId: "N18", changes: [{ key: "public_risk", operation: "add", value: 2 }] },
         { id: "N17-B", label: "封锁下方道路并通知支援", targetNodeId: "N19", changes: [{ key: "responsibility", operation: "add", value: 2 }, { key: "public_risk", operation: "subtract", value: 1 }] },
         { id: "N17-C", label: "留在楼道保护何桂兰和居民", targetNodeId: "N20", changes: [{ key: "responsibility", operation: "add", value: 2 }, { key: "evidence", operation: "add", value: 1 }] },
+      ],
+    },
+    {
+      id: "N17B", type: "scene", title: "预先准备的退路", speaker: "林峥",
+      content: "母亲重病的谎言没有让你放松控制。周骁发现请求无效，突然踢倒水箱旁一块预先松开的铁皮。巨响和灰尘遮住视线，他没有进入居民楼，而是翻过楼顶矮墙，沿提前绑好的排水绳滑向下一栋雨棚。\n\n你没有被“病重母亲”骗进狭窄楼道，也没有让居民陷入危险；但周骁显然为警方拒绝请求的情况同样准备了退路。追捕仍要继续。",
+      media: sceneMedia("N17 谎言逃亡.png", "周骁利用楼顶预设路线逃离", [environment("L04 居民楼楼顶与消防通道.png", "被提前布置过的楼顶退路")]),
+      choices: [
+        { id: "N17B-A", label: "根据背包线索重新追查去向", targetNodeId: "N18", changes: [{ key: "evidence", operation: "add", value: 1 }, { key: "deception_exposure", operation: "add", value: 1 }] },
+        { id: "N17B-B", label: "封锁道路并复询旧码头目击者", targetNodeId: "N19", changes: [{ key: "responsibility", operation: "add", value: 2 }, { key: "public_risk", operation: "subtract", value: 1 }] },
+        { id: "N17B-C", label: "先保护何桂兰，再核对身份使用记录", targetNodeId: "N20", changes: [{ key: "responsibility", operation: "add", value: 2 }, { key: "justice", operation: "add", value: 1 }] },
       ],
     },
     {
@@ -224,11 +244,11 @@ export const mistCatchGraph: StoryGraph = {
     },
     {
       id: "N22", type: "scene", title: "贸然冲入", speaker: "林峥",
-      content: "你冲进仓库，周骁立刻推倒货架。铁架砸在地面上，灰尘和碎玻璃遮住视线。你抓住了周骁的衣领，但人质的脸被碎玻璃擦伤。抓捕成功，却留下了本可以避免的风险。",
+      content: "你冲进仓库，周骁立刻推倒货架。铁架砸在地面上，灰尘和碎玻璃遮住视线。你一度抓住周骁的衣领，但倒塌的货架把你们隔开，人质的脸也被碎玻璃擦伤。\n\n周骁趁救援人员进场时撞开侧门，向码头边缘逃去。贸然冲入没有缩短追捕，反而制造了本可以避免的伤害。",
       media: sceneMedia("N22 贸然冲入.png", "贸然冲入仓库的风险") ,
       choices: [
         { id: "N22-A", label: "先处理人质伤口", targetNodeId: "N25", changes: [{ key: "responsibility", operation: "add", value: 2 }, { key: "public_risk", operation: "subtract", value: 1 }] },
-        { id: "N22-B", label: "先把周骁押上警车", targetNodeId: "N25", changes: [{ key: "justice", operation: "add", value: 1 }, { key: "public_risk", operation: "add", value: 1 }] },
+        { id: "N22-B", label: "立刻从侧门继续追赶", targetNodeId: "N25", changes: [{ key: "evidence", operation: "add", value: 1 }, { key: "public_risk", operation: "add", value: 1 }] },
       ],
     },
     {
@@ -270,12 +290,12 @@ export const mistCatchGraph: StoryGraph = {
     },
     {
       id: "E02", type: "ending", title: "谎言下的逃亡", endingKey: "escape-by-lie", speaker: "旁白",
-      content: "周骁利用楼道、消防通道和林峥的迟疑逃出居民楼。警方只找到一件丢在公交站的外套。所谓病重的母亲正在厨房煮粥，桌上却留着周骁的纸条：“谢谢你相信我。”案件暂时失败，但旧码头监控仍保存着他的身影，下一次追捕终会开始。",
+      content: "林峥独自靠近，想用一次冒险结束追捕。周骁却突然把铁钩抛向水面，趁林峥本能回头确认时跳上预先松开的缆船。\n\n支援人员既要保护林峥，又要确认水面安全，封锁线因此出现短暂缺口。周骁沿货运水道逃离，只留下那句已经使用过很多次的谎话：“我只是想回家看我妈。”案件暂时失败，责任也必须被认真复盘。",
       media: sceneMedia("E02 谎言下的逃亡.png", "周骁利用谎言逃亡的结局画面"),
     },
     {
       id: "E03", type: "ending", title: "错误判断", endingKey: "wrong-judgement", speaker: "陈队长",
-      content: "林峥抓住了被误认为同伙的无辜邻居，却让周骁趁混乱转移了赃物。陈队长没有替他解释，只要求他当面道歉、补全证据链：“你的问题不是心软，而是没有用事实保护别人。”周骁再次消失在雾港以外。",
+      content: "林峥在证据不足时公开指责何桂兰和仓库工人协助周骁。现场注意力被错误对象吸引，真正负责转移赃物的货车司机趁乱发动汽车，周骁也借机逃上货运驳船。\n\n陈队长要求林峥向无辜者道歉并重新补全证据链：“你的问题不是不够强硬，而是没有用事实保护别人。”抓捕失败，错误判断还伤害了本该被保护的人。",
       media: sceneMedia("E03 错误判断.png", "错误判断后的结局画面"),
     },
     {
@@ -290,3 +310,92 @@ export const mistCatchGraph: StoryGraph = {
     },
   ],
 };
+
+type CaseBridge = {
+  id: string;
+  title: string;
+  content: string;
+  images: Array<[string, string]>;
+};
+
+const investigationBridge: CaseBridge = {
+  id: "CASE-01",
+  title: "第一轮调查结论",
+  content: "目前可以确认：门锁没有被暴力破坏，现场的鞋和脚印存在刻意误导，嫌疑人提前熟悉住宅和离开路线。\n\n监控与证词把目标指向惯偷周骁。他最后出现的位置是旧码头。接下来的重点从“发生了什么”转为“怎样在不伤及群众的情况下找到并控制他”。",
+  images: [["N02 监控里的空白.png", "监控与现场线索汇合"], ["P02 假鞋印与真实脚印.png", "被识破的假鞋印"]],
+};
+
+const pursuitBridge: CaseBridge = {
+  id: "CASE-02",
+  title: "第一次围捕结果",
+  content: "周骁利用摊车、人群和换装拖慢警方。他并不只是在逃跑，还在观察警察会优先追人、保护群众，还是维持封锁。\n\n目标最终进入废弃车站。现场没有发现周骁本人，只找到一个被刻意留下的黑色背包。背包里的每件东西都可能是线索，也可能是为下一场谎言准备的道具。",
+  images: [["N08 先亮起的警灯.png", "旧码头围捕后的警灯"], ["N09 废弃车站的背包.png", "废弃车站里被刻意留下的背包"]],
+};
+
+const evidenceBridge: CaseBridge = {
+  id: "CASE-03",
+  title: "背包没有替案件下结论",
+  content: "纸条、缴费单和损坏手机都围绕同一个说法：周骁有一位病重的母亲。\n\n但同情不能代替核实。无论目前掌握了多少矛盾，警方都还没有见到何桂兰本人。与此同时，技术组从手机照片和周边监控中锁定了居民楼楼顶——周骁正在那里等待警方靠近。",
+  images: [["P03 假线索背包.png", "背包中的纸条、票据与手机"], ["N13 楼顶的抓捕.png", "居民楼顶再次出现的嫌疑人"]],
+};
+
+const regroupBridge: CaseBridge = {
+  id: "CASE-04",
+  title: "三条线索指向同一地点",
+  content: "重新检查背包、复询码头目击者以及核对何桂兰的身份记录，最终都指向旧码头7号仓库。\n\n警方判断周骁准备利用夜间货运线路离开雾港。仓库里可能有赃物、协助转运的人，也可能有被他利用的无辜者。行动目标被明确为：封锁货运出口、确认人员安全、依法控制周骁。",
+  images: [["N18 重新检查背包.png", "重新汇总的追踪线索"], ["L05 七号仓库环境.png", "线索指向的旧码头七号仓库"]],
+};
+
+const finalBridge: CaseBridge = {
+  id: "CASE-05",
+  title: "仓库危机以后",
+  content: "仓库行动迫使周骁失去掩护，手提箱和药品也重新回到警方视线中。人质是否安全、证据是否完整，取决于此前的处置。\n\n周骁仍握着铁钩逃到码头边缘。天快亮了，最后的对峙不再只是比谁更快，而是检验林峥能否在压力下继续保护人、遵守程序并识破最后一次操纵。",
+  images: [["N24 先救出人质.png", "仓库内的人质与赃物"], ["N25 最后一盏灯.png", "旧码头边缘的最后对峙"]],
+};
+
+const bridgeByEdge: Record<string, CaseBridge> = {
+  "N02->N05": investigationBridge,
+  "N03->N05": investigationBridge,
+  "N04->N05": investigationBridge,
+  "N06->N09": pursuitBridge,
+  "N07->N09": pursuitBridge,
+  "N08->N09": pursuitBridge,
+  "N10->N13": evidenceBridge,
+  "N11->N13": evidenceBridge,
+  "N12->N13": evidenceBridge,
+  "N18->N21": regroupBridge,
+  "N19->N21": regroupBridge,
+  "N20->N21": regroupBridge,
+  "N22->N25": finalBridge,
+  "N23->N25": finalBridge,
+  "N24->N25": finalBridge,
+};
+
+function addCaseBridges(graph: StoryGraph): StoryGraph {
+  const nodes = graph.nodes.map((node) => ({ ...node }));
+  const bridges: StoryNode[] = [];
+
+  for (const node of nodes) {
+    if (!node.choices) continue;
+    node.choices = node.choices.map((choice) => {
+      const bridge = bridgeByEdge[`${node.id}->${choice.targetNodeId}`];
+      if (!bridge) return choice;
+      const bridgeId = `${bridge.id}-${node.id}-${choice.id}`;
+      bridges.push({
+        id: bridgeId,
+        type: "scene",
+        title: bridge.title,
+        speaker: "案件进展",
+        content: bridge.content,
+        media: bridge.images.map(([filename, alt]) => mistImage(filename, alt)),
+        nextNodeId: choice.targetNodeId,
+        presentation: { transition: "dissolve", textReveal: "paragraph" },
+      });
+      return { ...choice, targetNodeId: bridgeId };
+    });
+  }
+
+  return { ...graph, nodes: [...nodes, ...bridges] };
+}
+
+export const mistCatchGraph: StoryGraph = addCaseBridges(mistCatchBaseGraph);

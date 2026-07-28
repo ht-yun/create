@@ -57,10 +57,46 @@ test("keeps immersive controls recoverable and progress media-aware", async () =
   assert.match(player, /role="dialog" aria-modal="true"/);
   assert.match(player, /aria-label="减小字号"/);
   assert.doesNotMatch(player, /feedbackText\.length \* 90|: 500/);
-  assert.match(player, /preferences\.reducedMotion \? 0 : 100/);
+  assert.doesNotMatch(player, /preferences\.reducedMotion \? 0 : 100/);
+  assert.match(player, /isInterlude = current\?\.type === "scene" && !choices\.length/);
+  assert.match(player, /interludeTimerRef/);
+  assert.match(player, /frameDuration = preferences\.reducedMotion \? 0 : 3000/);
+  assert.match(player, /activeFrameRef\.current\?\.mediaIndex \?\? 0/);
+  assert.match(player, /choices\.length > 0/);
   assert.match(player, /className="transition-feedback"/);
   assert.match(styles, /@media\(max-width:430px\)\{\.immersive-toolbar nav button:nth-child\(1\)\{display:grid\}\}/);
   assert.match(styles, /drawer-scrim/);
+});
+
+test("gates subtitles and choices only while AI voice narration is active", async () => {
+  const player = await readFile(new URL("../components/story-player.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(player, /media\.kind === "audio" && media\.role === "voice"/);
+  assert.match(player, /narrationState === "waiting" \|\| narrationState === "playing"/);
+  assert.match(player, /addEventListener\("ended", handleEnded\)/);
+  assert.match(player, /finishNarration\("failed"\)/);
+  assert.match(player, /className="narration-skip"/);
+  assert.match(player, /!pureView && !narrationActive/);
+  assert.match(player, /voiceMedia \? "点击开始播放本段旁白"/);
+  assert.match(player, /hasNarration\(initialNode\) \? "waiting" : "none"/);
+  assert.match(styles, /\.narration-skip/);
+});
+
+test("provides a version-independent AI narration generation boundary", async () => {
+  const controller = await readFile(new URL("../backend/src/stories/stories.controller.ts", import.meta.url), "utf8");
+  const service = await readFile(new URL("../backend/src/stories/narration.service.ts", import.meta.url), "utf8");
+  const provider = await readFile(new URL("../backend/src/stories/narration-provider.ts", import.meta.url), "utf8");
+  const schema = await readFile(new URL("../backend/src/database/schema.sql", import.meta.url), "utf8");
+  assert.match(controller, /:id\/narration\/generate/);
+  assert.match(controller, /:id\/nodes\/:nodeId\/narration\/generate/);
+  assert.match(controller, /:id\/narration\/jobs\/:jobId/);
+  assert.match(controller, /:id\/narration\/status/);
+  assert.match(service, /narrationHash\(node\.content\)/);
+  assert.match(service, /role: "voice"/);
+  assert.match(provider, /interface NarrationProvider/);
+  assert.match(provider, /TTS_BASE_URL/);
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS story_narration_jobs/);
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS story_narrations/);
 });
 
 test("keeps scene transitions decoded, double-buffered, and backward compatible", async () => {
@@ -99,12 +135,51 @@ test("ships lightweight playback images while preserving originals", async () =>
 
 test("binds the mist-catch story to its scene and ending images", async () => {
   const story = await readFile(new URL("../lib/mist-catch-story.ts", import.meta.url), "utf8");
-  assert.equal((story.match(/media: sceneMedia\(/g) ?? []).length, 30);
+  assert.equal((story.match(/media: sceneMedia\(/g) ?? []).length, 32);
   assert.match(story, /N01 雨夜失窃\.png/);
   assert.match(story, /N25 最后一盏灯\.png/);
   assert.match(story, /E05 码头边的救援\.png/);
   await access(new URL("../public/story-assets/mist-catch/N01%20%E9%9B%A8%E5%A4%9C%E5%A4%B1%E7%AA%83.png", import.meta.url));
   await access(new URL("../public/story-assets/optimized/mist-catch/N01%20%E9%9B%A8%E5%A4%9C%E5%A4%B1%E7%AA%83.webp", import.meta.url));
+});
+
+test("keeps the evening breeze and mist chase narratives contextually coherent", async () => {
+  const eveningResponse = await render("/stories/evening-breeze-says");
+  const mistResponse = await render("/stories/mist-catch-last-lamp");
+  assert.equal(eveningResponse.status, 200);
+  assert.equal(mistResponse.status, 200);
+  assert.match(await eveningResponse.text(), /故事发生在书店关门前的最后一个雨夜/);
+  assert.match(await mistResponse.text(), /你将以年轻民警林峥的视角/);
+
+  const evening = await readFile(new URL("../lib/evening-breeze-web-story.ts", import.meta.url), "utf8");
+  const mist = await readFile(new URL("../lib/mist-catch-story.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(evening, /两个人的书包|同一条走廊|旧街活动之后/);
+  assert.match(evening, /七年的空白/);
+  assert.match(evening, /信封里的七年前/);
+  assert.match(mist, /id: "N17B"/);
+  assert.match(mist, /三条线索指向同一地点/);
+  assert.match(mist, /仓库危机以后/);
+  assert.doesNotMatch(mist, /如果你允许周骁回家，他会/);
+});
+
+test("keeps the after-school story first-person, paced, and automatically routed", async () => {
+  const response = await render("/stories/after-school-wind");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /我叫江予安，在雾溪县一中读高二/);
+  assert.match(html, /我起身替她扶住桌角/);
+  assert.doesNotMatch(html, /最终走向取决于|学习和感情数值/);
+
+  const story = await readFile(new URL("../lib/after-school-wind-story.ts", import.meta.url), "utf8");
+  const player = await readFile(new URL("../components/story-player.tsx", import.meta.url), "utf8");
+  assert.match(story, /type: "condition"/);
+  assert.equal((story.match(/type: "ending"/g) ?? []).length, 1);
+  assert.equal((story.match(/\n  ending\(/g) ?? []).length, 11);
+  assert.match(story, /speaker: "我"/);
+  assert.match(story, /setFlag\("misunderstanding", false\)/);
+  assert.match(player, /current\?\.type !== "condition"/);
+  assert.match(player, /routedConditionRef/);
+  assert.match(player, /"after-school-wind", "evening-breeze-says", "mist-catch-last-lamp"/);
 });
 
 test("contains the planned product routes and no disposable preview", async () => {

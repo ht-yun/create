@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
-import { ArrowLeft, Bookmark, ChevronLeft, ChevronRight, Eye, EyeOff, Fullscreen, Headphones, History, Home, ImageIcon, Maximize2, Minimize2, MoreHorizontal, RotateCcw, Share2, SlidersHorizontal, Sparkles, Volume2, VolumeX, X } from "lucide-react";
+import { ArrowLeft, Bookmark, ChevronLeft, ChevronRight, Eye, EyeOff, Fullscreen, Headphones, History, Home, ImageIcon, Maximize2, Minimize2, MoreHorizontal, RotateCcw, Share2, SkipForward, SlidersHorizontal, Sparkles, Volume2, VolumeX, X } from "lucide-react";
 import type { StoryChoice, StoryCondition, StoryDetail, StoryMedia, StoryNode, VariableChange } from "@/shared/story-contract";
 
 type VariableState = Record<string, number | boolean | string>;
@@ -11,6 +11,7 @@ type HistoryEntry = { nodeId: string; variables: VariableState; choiceLabel?: st
 type SavedExperience = { currentId: string; variables: VariableState; history: HistoryEntry[]; mediaIndex: number; mediaTimes?: Record<string, number>; savedAt: string };
 type PlayerPreferences = { sound: boolean; fit: "cover" | "contain"; showValues: boolean; highContrast: boolean; reducedMotion: boolean; haptics: boolean; fontScale: number; overlayOpacity: number };
 type DrawerName = "variables" | "history" | "settings";
+type NarrationState = "none" | "waiting" | "playing" | "finished" | "skipped" | "failed";
 type VisualFrame = {
   key: string;
   nodeId: string;
@@ -55,6 +56,10 @@ function focalPosition(media?: StoryMedia) {
 
 function playbackUrl(media?: StoryMedia) {
   return media?.kind === "image" ? media.playbackUrl ?? media.url : media?.url;
+}
+
+function hasNarration(node?: StoryNode) {
+  return Boolean(node?.media?.some((media) => media.kind === "audio" && media.role === "voice" && media.url));
 }
 
 function frameForNode(story: StoryDetail, node: StoryNode, mediaIndex: number, resolvedUrl?: string, forceEmpty = false): VisualFrame {
@@ -118,6 +123,7 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
   const playerRef = useRef<HTMLElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const interludeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const preparingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStartRef = useRef<number | null>(null);
   const mediaTimesRef = useRef<Record<string, number>>({});
@@ -129,8 +135,10 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
   const visualRequestTokenRef = useRef(0);
   const visualPhaseRef = useRef<"loading" | "animating" | null>(null);
   const queuedGalleryRef = useRef<QueuedGallery | null>(null);
+  const routedConditionRef = useRef<string | undefined>(undefined);
   const audioElementsRef = useRef(new Map<string, HTMLAudioElement>());
   const audioFadeTimersRef = useRef(new Map<string, ReturnType<typeof setInterval>>());
+  const narrationFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialVariables = useMemo(() => Object.fromEntries(story.graph.variables.map((variable) => [variable.key, variable.initialValue])), [story]);
   const nodes = useMemo(() => new Map(story.graph.nodes.map((node) => [node.id, node])), [story]);
   const [currentId, setCurrentId] = useState(story.graph.startNodeId);
@@ -156,17 +164,22 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
   const [feedback, setFeedback] = useState("");
   const [isPreparingFrame, setIsPreparingFrame] = useState(false);
   const [resumePrompt, setResumePrompt] = useState(false);
+  const [narrationState, setNarrationState] = useState<NarrationState>(() => hasNarration(initialNode) ? "waiting" : "none");
 
   const current = nodes.get(currentId) as StoryNode | undefined;
   const choices = useMemo(() => (current?.choices ?? []).filter((choice) => (choice.conditions ?? []).every((condition) => passes(condition, variables))), [current, variables]);
   const paragraphs = useMemo(() => (current?.content ?? "").split(/\n\s*\n/).map((item) => item.trim()).filter(Boolean), [current]);
   const visualMedia = useMemo(() => (current?.media ?? []).filter((media) => (media.kind === "image" || media.kind === "video") && (!media.role || media.role === "scene")), [current]);
   const audioMedia = useMemo(() => (current?.media ?? []).filter((media) => media.kind === "audio"), [current]);
+  const voiceMedia = useMemo(() => audioMedia.find((media) => media.role === "voice"), [audioMedia]);
+  const narrationActive = Boolean(voiceMedia) && (narrationState === "waiting" || narrationState === "playing");
+  const isInterlude = current?.type === "scene" && !choices.length && Boolean(current.nextNodeId);
   const selectedMedia = visualMedia[mediaIndex] ?? visualMedia[0];
   const hasAudio = story.graph.nodes.some((node) => node.media?.some((media) => media.kind === "audio"));
   const remainingSteps = current ? distanceToEnding(current.id, nodes) : 1;
   const progress = current?.type === "ending" ? 100 : Math.min(95, Math.max(3, Math.round(((history.length + 1) / (history.length + remainingSteps + 2)) * 100)));
-  const progressKey = `storyloom:experience:${story.slug}`;
+  const experienceRevision = ["after-school-wind", "evening-breeze-says", "mist-catch-last-lamp"].includes(story.slug) ? "v2" : "v1";
+  const progressKey = `storyloom:experience:${story.slug}:${experienceRevision}`;
   const preferenceKey = `storyloom:player-preferences:${story.slug}`;
   const style = { "--story-font-scale": preferences.fontScale, "--story-overlay-opacity": preferences.overlayOpacity } as CSSProperties;
 
@@ -327,10 +340,66 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
     requestGalleryRef.current = requestGallery;
   }, [requestGallery]);
 
+  const persistAndMove = useCallback((targetNodeId: string, nextVariables: VariableState, nextHistory: HistoryEntry[]) => {
+    const targetNode = nodes.get(targetNodeId);
+    if (!targetNode) { setLocked(false); return; }
+    window.setTimeout(() => saveProgress({ currentId: targetNodeId, variables: nextVariables, history: nextHistory, mediaIndex: 0, savedAt: new Date().toISOString() }), 0);
+    if (visualTransitionTimerRef.current) clearTimeout(visualTransitionTimerRef.current);
+    setOutgoingFrame(undefined);
+    setVisualTransition(undefined);
+    queuedGalleryRef.current = null;
+    visualPhaseRef.current = "loading";
+    const token = ++visualRequestTokenRef.current;
+    if (preparingTimerRef.current) clearTimeout(preparingTimerRef.current);
+    preparingTimerRef.current = setTimeout(() => {
+      if (token === visualRequestTokenRef.current) setIsPreparingFrame(true);
+    }, 150);
+    void prepareFrame(targetNode, 0).then((frame) => {
+      if (token !== visualRequestTokenRef.current) return;
+      if (preparingTimerRef.current) clearTimeout(preparingTimerRef.current);
+      setIsPreparingFrame(false);
+      completeFrameTransition(frame, { kind: "node", style: targetNode.presentation?.transition ?? "dissolve", direction: 0 }, () => {
+        setVariables(nextVariables);
+        setHistory(nextHistory);
+        setMediaIndex(frame.mediaIndex);
+        setNarrationState(hasNarration(targetNode) ? "waiting" : "none");
+        setCurrentId(targetNodeId);
+      });
+    });
+  }, [completeFrameTransition, nodes, prepareFrame, saveProgress]);
+
+  const continueTo = useCallback((target: string) => {
+    if (locked) return;
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+    setFeedback("");
+    setLocked(true);
+    persistAndMove(target, variables, [...history, { nodeId: currentId, variables: { ...variables }, mediaIndex }]);
+  }, [currentId, history, locked, mediaIndex, persistAndMove, variables]);
+
   const revealAll = useCallback(() => {
     setVisibleParagraphs(paragraphs.length);
     setChoicesReady(true);
   }, [paragraphs.length]);
+
+  const finishNarration = useCallback((state: Extract<NarrationState, "finished" | "skipped" | "failed">) => {
+    if (narrationFallbackTimerRef.current) {
+      clearTimeout(narrationFallbackTimerRef.current);
+      narrationFallbackTimerRef.current = null;
+    }
+    setNarrationState(state);
+    setVisibleParagraphs(paragraphs.length);
+    setChoicesReady(true);
+  }, [paragraphs.length]);
+
+  const skipNarration = useCallback(() => {
+    if (!voiceMedia) return;
+    const element = audioElementsRef.current.get(voiceMedia.url);
+    if (element) {
+      element.pause();
+      element.currentTime = 0;
+    }
+    finishNarration("skipped");
+  }, [finishNarration, voiceMedia]);
 
   const wakeControls = useCallback(() => {
     setControlsVisible(true);
@@ -367,6 +436,7 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
               if (cancelled) return;
               activeFrameRef.current = frame;
               setActiveFrame(frame);
+              setNarrationState(hasNarration(savedNode) ? "waiting" : "none");
               setCurrentId(saved.currentId);
               setVariables(saved.variables);
               setHistory(saved.history);
@@ -386,15 +456,36 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
     const resetTimer = setTimeout(() => {
       setLocked(false);
       setSelectedChoiceId(undefined);
-      setVisibleParagraphs(instant ? paragraphs.length : 0);
-      setChoicesReady(instant || !paragraphs.length);
+      if (voiceMedia) {
+        setNarrationState("waiting");
+        setVisibleParagraphs(0);
+        setChoicesReady(false);
+      } else {
+        setNarrationState("none");
+        setVisibleParagraphs(instant ? paragraphs.length : 0);
+        setChoicesReady(instant || !paragraphs.length);
+      }
     }, 0);
-    const timers = instant ? [] : paragraphs.map((_, index) => setTimeout(() => {
+    const timers = instant || voiceMedia ? [] : paragraphs.map((_, index) => setTimeout(() => {
       setVisibleParagraphs(index + 1);
       if (index === paragraphs.length - 1) setChoicesReady(true);
     }, Math.min(1200, 120 + index * 220)));
     return () => { clearTimeout(resetTimer); timers.forEach(clearTimeout); };
-  }, [currentId, current?.presentation?.textReveal, paragraphs, preferences.reducedMotion]);
+  }, [currentId, current?.presentation?.textReveal, paragraphs, preferences.reducedMotion, voiceMedia]);
+
+  useEffect(() => {
+    if (current?.type !== "condition" || locked || !choicesReady) return;
+    const route = choices[0];
+    if (!route || routedConditionRef.current === current.id) return;
+    routedConditionRef.current = current.id;
+    const timer = window.setTimeout(() => {
+      const nextVariables = applyChanges(variables, route.changes);
+      const nextHistory = [...history, { nodeId: currentId, variables: { ...variables }, mediaIndex }];
+      setLocked(true);
+      persistAndMove(route.targetNodeId, nextVariables, nextHistory);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [choices, choicesReady, current, currentId, history, locked, mediaIndex, persistAndMove, variables]);
 
   useEffect(() => {
     if (document.hidden) return;
@@ -412,7 +503,36 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
   }, [mediaIndex, prepareImage, visualMedia]);
 
   useEffect(() => {
-    const activeUrls = new Set(audioMedia.map((media) => media.url));
+    if (interludeTimerRef.current) clearTimeout(interludeTimerRef.current);
+    if (!isInterlude || !current?.nextNodeId || locked || !choicesReady) return;
+    const frameDuration = preferences.reducedMotion ? 0 : 3000;
+    const imageCount = Math.max(1, visualMedia.length);
+    const contentLength = current.content.replace(/\s/g, "").length;
+    const readingDuration = current.speaker === "章节"
+      ? 3200
+      : Math.max(5200, Math.min(12000, contentLength * 85));
+    let imageTimer: ReturnType<typeof setInterval> | null = null;
+    if (imageCount > 1 && !preferences.reducedMotion) {
+      let nextIndex = activeFrameRef.current?.mediaIndex ?? 0;
+      imageTimer = setInterval(() => {
+        nextIndex = (nextIndex + 1) % imageCount;
+        requestGallery(nextIndex, 1);
+      }, frameDuration);
+    }
+    interludeTimerRef.current = setTimeout(
+      () => continueTo(current.nextNodeId!),
+      Math.max(readingDuration, frameDuration * imageCount + 900),
+    );
+    return () => {
+      if (interludeTimerRef.current) clearTimeout(interludeTimerRef.current);
+      if (imageTimer) clearInterval(imageTimer);
+    };
+  }, [choicesReady, continueTo, current, isInterlude, locked, preferences.reducedMotion, requestGallery, visualMedia.length]);
+
+  useEffect(() => {
+    const playableAudio = audioMedia.filter((media) => media.role !== "voice" || narrationState === "waiting" || narrationState === "playing");
+    const activeUrls = new Set(playableAudio.map((media) => media.url));
+    const listenerCleanups: Array<() => void> = [];
     const fadeTo = (url: string, element: HTMLAudioElement, target: number, duration: number, onDone?: () => void) => {
       const existingTimer = audioFadeTimersRef.current.get(url);
       if (existingTimer) clearInterval(existingTimer);
@@ -438,14 +558,14 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
       }
     }
     if (!preferences.sound) return;
-    for (const media of audioMedia) {
+    for (const media of playableAudio) {
       let element = audioElementsRef.current.get(media.url);
       if (!element) {
         element = new Audio(media.url);
         element.preload = "auto";
         element.volume = 0;
         const savedTime = mediaTimesRef.current[media.url];
-        if (Number.isFinite(savedTime)) {
+        if (media.role !== "voice" && Number.isFinite(savedTime)) {
           const restoreTime = () => { if (element) element.currentTime = savedTime; };
           if (element.readyState >= 1) restoreTime();
           else element.addEventListener("loadedmetadata", restoreTime, { once: true });
@@ -453,10 +573,40 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
         audioElementsRef.current.set(media.url, element);
       }
       element.loop = media.loop ?? (media.role === "music" || media.role === "ambience");
+      if (media.role === "voice" && narrationState === "waiting") element.currentTime = 0;
       const targetVolume = Math.max(0, Math.min(1, media.volume ?? .55));
-      void element.play().then(() => fadeTo(media.url, element, targetVolume, preferences.reducedMotion ? 50 : 800)).catch(() => setAudioPromptDismissed(false));
+      if (media.role === "voice") {
+        const narrationElement = element;
+        const handleEnded = () => finishNarration("finished");
+        const handleError = () => {
+          setNotice("旁白加载失败，已切换为阅读模式");
+          finishNarration("failed");
+        };
+        narrationElement.addEventListener("ended", handleEnded);
+        narrationElement.addEventListener("error", handleError);
+        listenerCleanups.push(() => {
+          narrationElement.removeEventListener("ended", handleEnded);
+          narrationElement.removeEventListener("error", handleError);
+        });
+        if (narrationFallbackTimerRef.current) clearTimeout(narrationFallbackTimerRef.current);
+        narrationFallbackTimerRef.current = setTimeout(handleError, 12000);
+      }
+      void element.play().then(() => {
+        if (media.role === "voice") {
+          if (narrationFallbackTimerRef.current) {
+            clearTimeout(narrationFallbackTimerRef.current);
+            narrationFallbackTimerRef.current = null;
+          }
+          setNarrationState("playing");
+        }
+        fadeTo(media.url, element, targetVolume, preferences.reducedMotion ? 50 : 800);
+      }).catch(() => {
+        if (media.role === "voice") setNarrationState("waiting");
+        setAudioPromptDismissed(false);
+      });
     }
-  }, [audioMedia, preferences.reducedMotion, preferences.sound]);
+    return () => listenerCleanups.forEach((cleanup) => cleanup());
+  }, [audioMedia, finishNarration, narrationState, preferences.reducedMotion, preferences.sound]);
 
   useEffect(() => {
     const handleVisibility = () => {
@@ -487,8 +637,10 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
   useEffect(() => () => {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+    if (interludeTimerRef.current) clearTimeout(interludeTimerRef.current);
     if (preparingTimerRef.current) clearTimeout(preparingTimerRef.current);
     if (visualTransitionTimerRef.current) clearTimeout(visualTransitionTimerRef.current);
+    if (narrationFallbackTimerRef.current) clearTimeout(narrationFallbackTimerRef.current);
     visualRequestTokenRef.current += 1;
     for (const timer of audioFadeTimersRef.current.values()) clearInterval(timer);
     for (const element of audioElementsRef.current.values()) { element.pause(); element.src = ""; }
@@ -499,43 +651,20 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
       const target = event.target as HTMLElement | null;
       if (target?.closest("button, a, input, select, textarea")) return;
       wakeControls();
+      if (narrationActive && (event.key === " " || event.key === "Enter")) {
+        event.preventDefault();
+        return;
+      }
+      if (isInterlude && current?.nextNodeId && (event.key === " " || event.key === "Enter")) { event.preventDefault(); continueTo(current.nextNodeId); return; }
       if ((event.key === " " || event.key === "Enter") && !choicesReady) { event.preventDefault(); revealAll(); }
       if (event.key === "ArrowLeft" && visualMedia.length > 1) requestGallery(mediaIndex - 1, -1);
       if (event.key === "ArrowRight" && visualMedia.length > 1) requestGallery(mediaIndex + 1, 1);
     };
     window.addEventListener("keydown", handleKeyboard);
     return () => window.removeEventListener("keydown", handleKeyboard);
-  }, [choicesReady, mediaIndex, requestGallery, revealAll, visualMedia.length, wakeControls]);
+  }, [choicesReady, continueTo, current, isInterlude, mediaIndex, narrationActive, requestGallery, revealAll, visualMedia.length, wakeControls]);
 
   if (!current) return <main className="immersive-player missing-scene"><p>当前剧情节点不存在。</p><Link href="/workshop">返回创意工坊</Link></main>;
-
-  function persistAndMove(targetNodeId: string, nextVariables: VariableState, nextHistory: HistoryEntry[]) {
-    const targetNode = nodes.get(targetNodeId);
-    if (!targetNode) { setLocked(false); return; }
-    window.setTimeout(() => saveProgress({ currentId: targetNodeId, variables: nextVariables, history: nextHistory, mediaIndex: 0, savedAt: new Date().toISOString() }), 0);
-    if (visualTransitionTimerRef.current) clearTimeout(visualTransitionTimerRef.current);
-    setOutgoingFrame(undefined);
-    setVisualTransition(undefined);
-    queuedGalleryRef.current = null;
-    visualPhaseRef.current = "loading";
-    const token = ++visualRequestTokenRef.current;
-    if (preparingTimerRef.current) clearTimeout(preparingTimerRef.current);
-    preparingTimerRef.current = setTimeout(() => {
-      if (token === visualRequestTokenRef.current) setIsPreparingFrame(true);
-    }, 150);
-    const confirmation = new Promise<void>((resolve) => setTimeout(resolve, preferences.reducedMotion ? 0 : 100));
-    void Promise.all([prepareFrame(targetNode, 0), confirmation]).then(([frame]) => {
-      if (token !== visualRequestTokenRef.current) return;
-      if (preparingTimerRef.current) clearTimeout(preparingTimerRef.current);
-      setIsPreparingFrame(false);
-      completeFrameTransition(frame, { kind: "node", style: targetNode.presentation?.transition ?? "dissolve", direction: 0 }, () => {
-        setVariables(nextVariables);
-        setHistory(nextHistory);
-        setMediaIndex(frame.mediaIndex);
-        setCurrentId(targetNodeId);
-      });
-    });
-  }
 
   function choose(choice: StoryChoice) {
     if (locked) return;
@@ -549,14 +678,6 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
     if (feedbackText) feedbackTimerRef.current = setTimeout(() => setFeedback(""), Math.max(1000, Math.min(1800, feedbackText.length * 65)));
     if (preferences.haptics && navigator.vibrate) navigator.vibrate(choice.importance === "key" ? 22 : 10);
     persistAndMove(choice.targetNodeId, nextVariables, nextHistory);
-  }
-
-  function continueTo(target: string) {
-    if (locked) return;
-    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
-    setFeedback("");
-    setLocked(true);
-    persistAndMove(target, variables, [...history, { nodeId: currentId, variables: { ...variables }, mediaIndex }]);
   }
 
   function jump(index: number) {
@@ -576,6 +697,7 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
     void prepareFrame(targetNode, entry.mediaIndex ?? 0).then((frame) => {
       if (token !== visualRequestTokenRef.current) return;
       completeFrameTransition(frame, { kind: "node", style: targetNode.presentation?.transition ?? "dissolve", direction: 0 }, () => {
+        setNarrationState(hasNarration(targetNode) ? "waiting" : "none");
         setCurrentId(entry.nodeId);
         setVariables(entry.variables);
         setHistory(nextHistory);
@@ -601,6 +723,7 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
     void prepareFrame(targetNode, 0).then((frame) => {
       if (token !== visualRequestTokenRef.current) return;
       completeFrameTransition(frame, { kind: "node", style: targetNode.presentation?.transition ?? "dissolve", direction: 0 }, () => {
+        setNarrationState(hasNarration(targetNode) ? "waiting" : "none");
         setCurrentId(story.graph.startNodeId);
         setVariables(initialVariables);
         setHistory([]);
@@ -634,8 +757,11 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
   }
 
   function handleStageClick(event: React.MouseEvent<HTMLElement>) {
-    if ((event.target as HTMLElement).closest("button, a, .cinematic-dialogue, .player-drawer")) return;
+    if ((event.target as HTMLElement).closest("button, a, .player-drawer")) return;
+    if (!isInterlude && (event.target as HTMLElement).closest(".cinematic-dialogue")) return;
     wakeControls();
+    if (narrationActive) return;
+    if (isInterlude && current.nextNodeId) { continueTo(current.nextNodeId); return; }
     if (pureView) setPureView(false);
     else if (!choicesReady) revealAll();
   }
@@ -666,7 +792,11 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
         <nav>
           <button onClick={() => setDrawer(drawer === "variables" ? undefined : "variables")} aria-label="查看故事状态" aria-expanded={drawer === "variables"}><SlidersHorizontal size={18} /></button>
           <button onClick={() => setDrawer(drawer === "history" ? undefined : "history")} aria-label="查看走过的分支" aria-expanded={drawer === "history"}><History size={18} /></button>
-          <button className={preferences.sound ? "active" : ""} onClick={() => { setPreference("sound", !preferences.sound); setAudioPromptDismissed(true); }} aria-label={preferences.sound ? "关闭声音" : "开启声音"}>{preferences.sound ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>
+          <button className={preferences.sound ? "active" : ""} onClick={() => {
+            if (preferences.sound && narrationActive) skipNarration();
+            setPreference("sound", !preferences.sound);
+            setAudioPromptDismissed(true);
+          }} aria-label={preferences.sound ? "关闭声音" : "开启声音"}>{preferences.sound ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>
           <button onClick={() => setPreference("fit", preferences.fit === "cover" ? "contain" : "cover")} aria-label={preferences.fit === "cover" ? "查看完整画面" : "铺满屏幕"}>{preferences.fit === "cover" ? <ImageIcon size={18} /> : <Fullscreen size={18} />}</button>
           {fullscreenSupported ? <button onClick={toggleFullscreen} aria-label={isFullscreen ? "退出原生全屏" : "进入原生全屏"}>{isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button> : null}
           <button onClick={() => setPureView(true)} aria-label="进入纯画面模式"><EyeOff size={18} /></button>
@@ -674,10 +804,11 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
         </nav>
       </header>
 
+      {narrationActive ? <button className="narration-skip" onClick={(event) => { event.stopPropagation(); skipNarration(); wakeControls(); }}><SkipForward size={17} />跳过旁白</button> : null}
       {pureView ? <button className="exit-pure-view" onClick={(event) => { event.stopPropagation(); setPureView(false); wakeControls(); }}><Eye size={17} />显示剧情界面</button> : null}
       {notice ? <div className="immersive-notice" role="status">{notice}</div> : null}
       {feedback && !pureView ? <div className="transition-feedback" role="status"><Sparkles size={15} />{feedback}</div> : null}
-      {hasAudio && !preferences.sound && !audioPromptDismissed && !pureView ? <div className="audio-invite" inert={Boolean(drawer) ? true : undefined}><Headphones size={17} /><span>开启声音，进入完整故事氛围</span><button onClick={() => { setPreference("sound", true); setAudioPromptDismissed(true); }}>开启</button><button aria-label="暂不开启" onClick={() => setAudioPromptDismissed(true)}><X size={15} /></button></div> : null}
+      {hasAudio && !preferences.sound && !audioPromptDismissed && !pureView ? <div className="audio-invite" inert={Boolean(drawer) ? true : undefined}><Headphones size={17} /><span>{voiceMedia ? "点击开始播放本段旁白" : "开启声音，进入完整故事氛围"}</span><button onClick={() => { setPreference("sound", true); setAudioPromptDismissed(true); }}>{voiceMedia ? "开始旁白" : "开启"}</button><button aria-label={voiceMedia ? "跳过旁白" : "暂不开启"} onClick={() => { setAudioPromptDismissed(true); if (voiceMedia) skipNarration(); }}><X size={15} /></button></div> : null}
 
       {visualMedia.length > 1 && !pureView ? <div className="media-switcher" inert={Boolean(drawer) ? true : undefined}><button disabled={locked} onClick={() => requestGallery(mediaIndex - 1, -1)} aria-label="上一幅画面"><ChevronLeft size={19} /></button><div>{visualMedia.map((media, index) => <button key={`${media.url}-${index}`} disabled={locked} className={index === mediaIndex ? "active" : ""} onClick={() => requestGallery(index, index >= mediaIndex ? 1 : -1)} aria-label={`查看第 ${index + 1} 幅画面`} aria-current={index === mediaIndex ? "true" : undefined} />)}</div><button disabled={locked} onClick={() => requestGallery(mediaIndex + 1, 1)} aria-label="下一幅画面"><ChevronRight size={19} /></button></div> : null}
 
@@ -688,9 +819,10 @@ export function StoryPlayer({ story }: { story: StoryDetail }) {
 
       {drawer === "settings" ? <aside ref={drawerRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="体验设置" className="player-drawer settings-drawer"><div className="drawer-heading"><strong>体验设置</strong><button onClick={() => setDrawer(undefined)} aria-label="关闭设置"><X size={17} /></button></div><div className="setting-row"><span>字号</span><span><button aria-label="减小字号" onClick={() => setPreference("fontScale", Math.max(.85, preferences.fontScale - .1))}>－</button><b aria-live="polite">{Math.round(preferences.fontScale * 100)}%</b><button aria-label="增大字号" onClick={() => setPreference("fontScale", Math.min(1.35, preferences.fontScale + .1))}>＋</button></span></div><label>字幕背景 <input aria-label="字幕背景透明度" type="range" min="0.55" max="1" step="0.05" value={preferences.overlayOpacity} onChange={(event) => setPreference("overlayOpacity", Number(event.target.value))} /></label><label className="switch-row"><span>高对比度</span><input type="checkbox" checked={preferences.highContrast} onChange={(event) => setPreference("highContrast", event.target.checked)} /></label><label className="switch-row"><span>降低动态效果</span><input type="checkbox" checked={preferences.reducedMotion} onChange={(event) => setPreference("reducedMotion", event.target.checked)} /></label><label className="switch-row"><span>触觉反馈</span><input type="checkbox" checked={preferences.haptics} onChange={(event) => setPreference("haptics", event.target.checked)} /></label><button className="drawer-share" onClick={shareStory}><Share2 size={16} />分享剧情</button><Link className="drawer-share" href={`/auth?returnTo=${encodeURIComponent(`/stories/${story.slug}`)}`}><Bookmark size={16} />登录后收藏与跨端同步</Link></aside> : null}
 
-      {!pureView ? <article className="cinematic-dialogue" aria-live="polite" inert={Boolean(drawer) ? true : undefined}>
+      {!pureView && !narrationActive ? <article className="cinematic-dialogue" aria-live="polite" inert={Boolean(drawer) ? true : undefined}>
         <div className="dialogue-copy" key={currentId}><span>{current.speaker ?? "旁白"}</span><h1>{current.title}</h1><div>{paragraphs.slice(0, visibleParagraphs).map((paragraph, index) => <p key={`${currentId}-${index}`}>{paragraph}</p>)}</div>{!choicesReady ? <button className="reveal-all" onClick={revealAll}>点击显示全部</button> : null}</div>
-        {choicesReady && current.type !== "ending" ? <div className="cinematic-choices">{choices.map((choice, index) => <button key={choice.id} disabled={locked} className={`${selectedChoiceId === choice.id ? "selected" : ""} ${choice.importance === "key" ? "key-choice" : ""}`} onClick={() => choose(choice)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{choice.label}</strong><ChevronRight size={18} /></button>)}{!choices.length && current.nextNodeId ? <button disabled={locked} onClick={() => continueTo(current.nextNodeId!)}><span>→</span><strong>继续</strong><ChevronRight size={18} /></button> : null}</div> : null}
+        {choicesReady && current.type !== "ending" && current.type !== "condition" && choices.length > 0 ? <div className="cinematic-choices">{choices.map((choice, index) => <button key={choice.id} disabled={locked} className={`${selectedChoiceId === choice.id ? "selected" : ""} ${choice.importance === "key" ? "key-choice" : ""}`} onClick={() => choose(choice)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{choice.label}</strong><ChevronRight size={18} /></button>)}</div> : null}
+        {isInterlude && choicesReady ? <div className="interlude-skip-hint" role="status">点击画面跳过过场</div> : null}
         {choicesReady && current.type === "ending" ? <div className="immersive-ending"><span><Sparkles size={17} />已抵达结局 · {current.title}</span>{history.length ? <p>你的路线：{history.slice(-4).map((entry) => entry.choiceLabel).filter(Boolean).join(" → ")}</p> : null}<div><button onClick={restart}><RotateCcw size={16} />重新开始</button><Link href="/workshop"><Home size={16} />返回工坊</Link></div></div> : null}
       </article> : null}
 

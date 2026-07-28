@@ -4,6 +4,8 @@ import { StoriesController } from "./stories.controller.js";
 import { StoriesService } from "./stories.service.js";
 import { StoryPackageService } from "./story-package.service.js";
 import { ImageVariantService } from "./image-variant.service.js";
+import { NarrationService } from "./narration.service.js";
+import { OpenAiCompatibleNarrationProvider } from "./narration-provider.js";
 
-@Module({ imports: [AuthModule], controllers: [StoriesController], providers: [StoriesService, StoryPackageService, ImageVariantService], exports: [StoriesService, StoryPackageService, ImageVariantService] })
+@Module({ imports: [AuthModule], controllers: [StoriesController], providers: [StoriesService, StoryPackageService, ImageVariantService, NarrationService, OpenAiCompatibleNarrationProvider], exports: [StoriesService, StoryPackageService, ImageVariantService, NarrationService] })
 export class StoriesModule {}

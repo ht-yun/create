@@ -89,6 +89,53 @@ CREATE TABLE IF NOT EXISTS story_asset_variants (
 
 CREATE INDEX IF NOT EXISTS story_asset_variants_asset_idx ON story_asset_variants(asset_id, purpose);
 
+CREATE TABLE IF NOT EXISTS story_narration_settings (
+  story_id uuid PRIMARY KEY REFERENCES stories(id) ON DELETE CASCADE,
+  voice_id text NOT NULL DEFAULT 'alloy',
+  speed numeric(3,2) NOT NULL DEFAULT 1,
+  volume numeric(3,2) NOT NULL DEFAULT 1,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS story_narration_jobs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  story_id uuid NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+  author_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  provider text NOT NULL,
+  voice_id text NOT NULL,
+  speed numeric(3,2) NOT NULL DEFAULT 1,
+  volume numeric(3,2) NOT NULL DEFAULT 1,
+  status text NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'processing', 'completed', 'failed')),
+  total_nodes integer NOT NULL DEFAULT 0,
+  completed_nodes integer NOT NULL DEFAULT 0,
+  failed_nodes integer NOT NULL DEFAULT 0,
+  error_message text,
+  started_at timestamptz,
+  finished_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS story_narration_jobs_story_idx ON story_narration_jobs(story_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS story_narrations (
+  story_id uuid NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+  node_id text NOT NULL,
+  text_hash text NOT NULL,
+  provider text NOT NULL,
+  voice_id text NOT NULL,
+  speed numeric(3,2) NOT NULL DEFAULT 1,
+  asset_id uuid REFERENCES story_assets(id) ON DELETE SET NULL,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'ready', 'failed')),
+  duration_ms integer,
+  error_message text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (story_id, node_id)
+);
+
+CREATE INDEX IF NOT EXISTS story_narrations_asset_idx ON story_narrations(asset_id);
+
 CREATE TABLE IF NOT EXISTS favorites (
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   story_id uuid NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
