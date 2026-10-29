@@ -49,3 +49,5 @@ next-env.d.ts
 /work/
 .data/
 web-dev*.log
+*.log
+.codex-runtime-temp/

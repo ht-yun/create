@@ -5,6 +5,7 @@ export interface AuthenticatedUser {
   email: string;
   displayName: string;
   emailVerified: boolean;
+  role: "user" | "admin";
 }
 
 export interface AuthenticatedRequest extends Request {

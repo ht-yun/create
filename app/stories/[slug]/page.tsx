@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { StoryPlayer } from "@/components/story-player";
+import { StoryDetail } from "@/components/story-detail";
 import { getStory } from "@/lib/api";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
@@ -10,5 +10,5 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function StoryPage({ params }: { params: Promise<{ slug: string }> }) {
   const story = await getStory((await params).slug);
   if (!story) notFound();
-  return <StoryPlayer story={story} />;
+  return <StoryDetail story={story} />;
 }

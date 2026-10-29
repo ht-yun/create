@@ -132,7 +132,7 @@ export class StoriesService {
       title: row.title,
       summary: row.summary,
       authorName: row.author_name,
-      coverUrl: row.cover_url ?? undefined,
+      coverUrl: row.cover_url ?? this.firstImageUrl(row.graph),
       tags: row.tags,
       visibility: row.visibility,
       status: row.status,
@@ -143,5 +143,12 @@ export class StoriesService {
       score: Number(row.score),
       updatedAt: row.updated_at.toISOString(),
     };
+  }
+
+  private firstImageUrl(graph: StoryGraph) {
+    return graph.nodes
+      .flatMap((node) => node.media ?? [])
+      .find((media) => media.kind === "image")?.playbackUrl
+      ?? graph.nodes.flatMap((node) => node.media ?? []).find((media) => media.kind === "image")?.url;
   }
 }

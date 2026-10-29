@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Bell, Check, ChevronRight, Eye, Languages, LockKeyhole, MonitorCog, Palette, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { AccountAiSettings } from "@/components/account-ai-settings";
 
 export const metadata = { title: "设置" };
 const groups = [
@@ -19,5 +20,5 @@ export default function SettingsPage() {
     localStorage.setItem(`storyloom:${title}`, values[next]);
     setSaved(`${title}已设为“${values[next]}”`);
   }
-  return <AppShell active="settings"><div className="page-wrap settings-page"><header className="workshop-header"><div><span className="eyebrow">PREFERENCES</span><h1>设置</h1><p>让阅读与创作环境更贴合你的习惯。</p></div><span className="updated-badge"><MonitorCog size={16} />当前设备</span></header>{saved ? <button className="settings-saved" onClick={() => setSaved("")}><Check size={15} />{saved}</button> : null}{groups.map((group) => <section className="settings-group" key={group.title}><h2>{group.title}</h2>{group.items.map((item) => { const Icon = item.icon; const content = <><span className="setting-icon"><Icon size={19} /></span><span><strong>{item.title}</strong><small>{item.description}</small></span><em>{item.values[preferences[item.title] ?? 0]}</em><ChevronRight size={17} /></>; return item.href ? <Link className="settings-row" href={item.href} key={item.title}>{content}</Link> : <button className="settings-row" onClick={() => cycle(item.title, item.values)} key={item.title}>{content}</button>; })}</section>)}<section className="settings-group about-block"><h2>关于折枝</h2><p>当前为 Web 与后端的首个开发版本。产品名称、版权信息与社区规则将在公开测试前确定。</p><span>Version 0.1.0 · Web alpha</span></section></div></AppShell>;
+  return <AppShell active="settings"><div className="page-wrap settings-page"><header className="workshop-header"><div><span className="eyebrow">PREFERENCES</span><h1>设置</h1><p>让阅读与创作环境更贴合你的习惯。</p></div><span className="updated-badge"><MonitorCog size={16} />当前设备</span></header>{saved ? <button className="settings-saved" onClick={() => setSaved("")}><Check size={15} />{saved}</button> : null}{groups.map((group) => <section className="settings-group" key={group.title}><h2>{group.title}</h2>{group.items.map((item) => { const Icon = item.icon; const content = <><span className="setting-icon"><Icon size={19} /></span><span><strong>{item.title}</strong><small>{item.description}</small></span><em>{item.values[preferences[item.title] ?? 0]}</em><ChevronRight size={17} /></>; return item.href ? <Link className="settings-row" href={item.href} key={item.title}>{content}</Link> : <button className="settings-row" onClick={() => cycle(item.title, item.values)} key={item.title}>{content}</button>; })}</section>)}<AccountAiSettings /><section className="settings-group about-block"><h2>关于折枝</h2><p>当前为 Web 与后端的首个开发版本。产品名称、版权信息与社区规则将在公开测试前确定。</p><span>Version 0.1.0 · Web alpha</span></section></div></AppShell>;
 }

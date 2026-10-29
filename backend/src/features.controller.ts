@@ -13,6 +13,7 @@ export class FeaturesController {
     return {
       emailAuth: true,
       mediaUpload: this.config.get("STORAGE_PROVIDER", "disabled") !== "disabled",
+      aiStoryCreation: { enabled: true, provider: this.config.get("STORY_AI_API_KEY") ? "configured" : "guided-template" },
       aiImport: { enabled: false, acceptedSources: ["novel", "comic"], apiVersion: "v1-reserved" },
     };
   }

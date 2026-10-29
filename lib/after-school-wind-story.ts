@@ -8,11 +8,22 @@ import type {
 } from "@/shared/story-contract";
 
 const root = "/story-assets/after-school-wind/";
+const playbackRoot = "/story-assets/optimized/after-school-wind/";
+
+const soundtrack: StoryMedia = {
+  kind: "audio",
+  role: "music",
+  url: `${root}audio/${encodeURIComponent("MoreanP - 忆夏思乡.mp3")}`,
+  loop: true,
+  volume: 0.18,
+  alt: "《忆夏思乡》背景音乐",
+};
 
 const picture = (filename: string, alt: string): StoryMedia => ({
   kind: "image",
   role: "scene",
   url: `${root}${encodeURIComponent(filename)}`,
+  playbackUrl: `${playbackRoot}${encodeURIComponent(filename.replace(/\.[^.]+$/, ".webp"))}`,
   alt,
 });
 
@@ -913,5 +924,8 @@ export const afterSchoolWindGraph: StoryGraph = {
     { key: "future_plan", label: "共同规划未来", type: "boolean", initialValue: false },
     { key: "local_choice", label: "选择留在小城", type: "boolean", initialValue: false },
   ],
-  nodes,
+  nodes: nodes.map((node) => ({
+    ...node,
+    media: [...(node.media ?? []), soundtrack],
+  })),
 };

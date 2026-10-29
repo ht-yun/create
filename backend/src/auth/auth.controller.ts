@@ -20,6 +20,11 @@ export class AuthController {
     return this.auth.verifyEmail(body);
   }
 
+  @Post("resend-verification")
+  resendVerification(@Body() body: unknown) {
+    return this.auth.resendVerification(body);
+  }
+
   @Post("login")
   async login(@Body() body: unknown, @Res({ passthrough: true }) response: Response) {
     const result = await this.auth.login(body);

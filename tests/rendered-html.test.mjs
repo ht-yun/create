@@ -20,14 +20,83 @@ test("server-renders the Storyloom home page", async () => {
   assert.match(html, /创意工坊/);
   assert.match(html, /我的仓库/);
   assert.match(html, /雨夜来客/);
-  assert.match(html, /开始剧情/);
+  assert.match(html, /查看作品/);
+  assert.match(html, /随机推荐 · 每 3 秒更新/);
   assert.match(html, /href="\/stories\/rain-night-visitor"/);
   assert.match(html, /href="\/auth\?returnTo=%2Fstories%2Frain-night-visitor"/);
   assert.doesNotMatch(html, /Your site is taking shape|codex-preview/);
 });
 
-test("server-renders the playable demo without a running API", async () => {
+test("keeps homepage recommendations rotating and the series organizer compact", async () => {
+  const rotator = await readFile(new URL("../components/featured-story-rotator.tsx", import.meta.url), "utf8");
+  const organizer = await readFile(new URL("../components/workshop-series-organizer.tsx", import.meta.url), "utf8");
+  const filterMenu = await readFile(new URL("../components/workshop-filter-menu.tsx", import.meta.url), "utf8");
+  const workshop = await readFile(new URL("../app/workshop/page.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(rotator, /setInterval/);
+  assert.match(rotator, /3000/);
+  assert.match(rotator, /下一部推荐/);
+  assert.match(organizer, /series-organizer-compact/);
+  assert.match(organizer, /series-compact-trigger/);
+  assert.match(workshop, /workshop-navigation-row/);
+  assert.match(workshop, /page-wrap workshop-page/);
+  assert.match(workshop, /WorkshopFilterMenu/);
+  assert.match(filterMenu, /name="duration"/);
+  assert.match(filterMenu, /name="sort"/);
+  assert.match(styles, /\.workshop-page \.series-organizer-compact/);
+  assert.match(styles, /\.series-compact-panel/);
+});
+
+test("server-renders the community hub with sharing and discussion entry points", async () => {
+  const response = await render("/community");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /<title>社区 · 折枝<\/title>/);
+  assert.match(html, /分享喜欢的作品/);
+  assert.match(html, /作品分享/);
+  assert.match(html, /无剧透讨论/);
+  assert.match(html, /href="\/stories\/evening-breeze-says"/);
+  assert.match(html, /发布内容/);
+});
+
+test("server-renders the auth and admin entry points", async () => {
+  const authResponse = await render("/auth");
+  const adminResponse = await render("/admin");
+  assert.equal(authResponse.status, 200);
+  assert.equal(adminResponse.status, 200);
+  assert.match(await authResponse.text(), /保持登录 30 天/);
+  const adminHtml = await adminResponse.text();
+  assert.match(adminHtml, /管理后台/);
+  assert.match(adminHtml, /ADMIN CONSOLE/);
+  const authService = await readFile(new URL("../backend/src/auth/auth.service.ts", import.meta.url), "utf8");
+  const adminService = await readFile(new URL("../backend/src/admin/admin.service.ts", import.meta.url), "utf8");
+  const schema = await readFile(new URL("../backend/src/database/schema.sql", import.meta.url), "utf8");
+  assert.match(authService, /resendVerification/);
+  assert.match(authService, /confirmPassword/);
+  assert.match(authService, /role === "admin"/);
+  assert.match(adminService, /totalUsers/);
+  assert.match(adminService, /recentPosts/);
+  assert.match(schema, /community_posts/);
+  assert.match(schema, /role text NOT NULL DEFAULT 'user'/);
+  const authPanel = await readFile(new URL("../components/auth-panel.tsx", import.meta.url), "utf8");
+  assert.match(authPanel, /window\.location\.assign\(payload\.user\?\.role === "admin" \? "\/admin" : "\/"\)/);
+  assert.doesNotMatch(authPanel, /useRouter\(\)/);
+  assert.doesNotMatch(authPanel, /router\.push\(payload\.user\?\.role === "admin" \? "\/admin" : "\/studio"\)/);
+});
+
+test("server-renders a story detail page without a running API", async () => {
   const response = await render("/stories/rain-night-visitor");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /作品简介/);
+  assert.match(html, /用户评论/);
+  assert.match(html, /一个雨夜，一封旧信/);
+  assert.match(html, /href="\/stories\/rain-night-visitor\/play"/);
+  assert.doesNotMatch(html, /immersive-player/);
+});
+
+test("server-renders the playable demo from its detail page", async () => {
+  const response = await render("/stories/rain-night-visitor/play");
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /雨夜叩门/);
@@ -99,6 +168,52 @@ test("provides a version-independent AI narration generation boundary", async ()
   assert.match(schema, /CREATE TABLE IF NOT EXISTS story_narrations/);
 });
 
+test("provides a guarded AI interview-to-node creation workflow", async () => {
+  const response = await render("/studio/ai");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /AI 辅助创作/);
+  assert.match(html, /最多五个问题/);
+  assert.match(html, /先确认再生成/);
+  const controller = await readFile(new URL("../backend/src/ai-story/ai-story.controller.ts", import.meta.url), "utf8");
+  const service = await readFile(new URL("../backend/src/ai-story/ai-story.service.ts", import.meta.url), "utf8");
+  const provider = await readFile(new URL("../backend/src/ai-story/ai-story.provider.ts", import.meta.url), "utf8");
+  const schema = await readFile(new URL("../backend/src/database/schema.sql", import.meta.url), "utf8");
+  assert.match(controller, /@UseGuards\(SessionGuard\)/);
+  assert.match(controller, /:id\/outline/);
+  assert.match(controller, /:id\/generate/);
+  assert.match(controller, /:id\/apply/);
+  assert.match(service, /graphSchema\.safeParse/);
+  assert.match(service, /validateGeneratedGraph/);
+  assert.match(service, /无法走到结局/);
+  assert.match(service, /visibility: "private"/);
+  assert.match(provider, /STORY_AI_API_KEY/);
+  assert.match(provider, /GuidedTemplateStoryProvider/);
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS story_ai_sessions/);
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS story_ai_messages/);
+});
+
+test("provides encrypted account-level AI API configuration", async () => {
+  const response = await render("/settings");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /AI API 配置/);
+  assert.match(html, /接口地址/);
+  assert.match(html, /测试连接/);
+  const controller = await readFile(new URL("../backend/src/account-settings/account-settings.controller.ts", import.meta.url), "utf8");
+  const service = await readFile(new URL("../backend/src/account-settings/account-ai-settings.service.ts", import.meta.url), "utf8");
+  const aiService = await readFile(new URL("../backend/src/ai-story/ai-story.service.ts", import.meta.url), "utf8");
+  const schema = await readFile(new URL("../backend/src/database/schema.sql", import.meta.url), "utf8");
+  assert.match(controller, /@UseGuards\(SessionGuard\)/);
+  assert.match(controller, /@Post\("test"\)/);
+  assert.match(service, /aes-256-gcm/);
+  assert.match(service, /API_CREDENTIAL_ENCRYPTION_KEY/);
+  assert.match(service, /生产环境只允许公网 HTTPS API 地址/);
+  assert.match(aiService, /runtimeForUser/);
+  assert.match(aiService, /forAccount/);
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS user_ai_settings/);
+});
+
 test("keeps scene transitions decoded, double-buffered, and backward compatible", async () => {
   const player = await readFile(new URL("../components/story-player.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
@@ -144,8 +259,8 @@ test("binds the mist-catch story to its scene and ending images", async () => {
 });
 
 test("keeps the evening breeze and mist chase narratives contextually coherent", async () => {
-  const eveningResponse = await render("/stories/evening-breeze-says");
-  const mistResponse = await render("/stories/mist-catch-last-lamp");
+  const eveningResponse = await render("/stories/evening-breeze-says/play");
+  const mistResponse = await render("/stories/mist-catch-last-lamp/play");
   assert.equal(eveningResponse.status, 200);
   assert.equal(mistResponse.status, 200);
   assert.match(await eveningResponse.text(), /故事发生在书店关门前的最后一个雨夜/);
@@ -163,7 +278,7 @@ test("keeps the evening breeze and mist chase narratives contextually coherent",
 });
 
 test("keeps the after-school story first-person, paced, and automatically routed", async () => {
-  const response = await render("/stories/after-school-wind");
+  const response = await render("/stories/after-school-wind/play");
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /我叫江予安，在雾溪县一中读高二/);
@@ -176,6 +291,9 @@ test("keeps the after-school story first-person, paced, and automatically routed
   assert.equal((story.match(/type: "ending"/g) ?? []).length, 1);
   assert.equal((story.match(/\n  ending\(/g) ?? []).length, 11);
   assert.match(story, /speaker: "我"/);
+  assert.match(story, /role: "music"/);
+  assert.match(story, /MoreanP - 忆夏思乡\.mp3/);
+  assert.match(story, /volume: 0\.18/);
   assert.match(story, /setFlag\("misunderstanding", false\)/);
   assert.match(player, /current\?\.type !== "condition"/);
   assert.match(player, /routedConditionRef/);
@@ -185,7 +303,7 @@ test("keeps the after-school story first-person, paced, and automatically routed
 test("contains the planned product routes and no disposable preview", async () => {
   const files = [
     "../app/workshop/page.tsx", "../app/rankings/page.tsx", "../app/auth/page.tsx",
-    "../app/studio/page.tsx", "../app/studio/editor/page.tsx", "../app/stories/[slug]/page.tsx",
+    "../app/studio/page.tsx", "../app/studio/ai/page.tsx", "../app/studio/editor/page.tsx", "../app/studio/preview/page.tsx", "../app/community/page.tsx", "../app/admin/page.tsx", "../app/stories/[slug]/page.tsx", "../app/stories/[slug]/play/page.tsx",
   ];
   await Promise.all(files.map((file) => access(new URL(file, import.meta.url))));
   await assert.rejects(access(new URL("../app/_sites-preview/SkeletonPreview.tsx", import.meta.url)));

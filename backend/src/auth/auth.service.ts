@@ -10,11 +10,16 @@ const registerSchema = z.object({
   email: z.string().trim().email("请输入有效邮箱").max(254),
   displayName: z.string().trim().min(2, "昵称至少 2 个字符").max(32),
   password: z.string().min(8, "密码至少 8 位").max(128),
+  confirmPassword: z.string().min(1, "请再次输入密码"),
+}).refine((value) => value.password === value.confirmPassword, {
+  message: "两次输入的密码不一致",
+  path: ["confirmPassword"],
 });
 
 const loginSchema = z.object({
   email: z.string().trim().email("请输入有效邮箱"),
   password: z.string().min(1, "请输入密码"),
+  remember: z.boolean().optional().default(true),
 });
 
 interface UserRow {
@@ -23,12 +28,14 @@ interface UserRow {
   display_name: string;
   password_hash: string;
   email_verified_at: Date | null;
+  role: "user" | "admin";
 }
 
 @Injectable()
 export class AuthService {
   private readonly cookieName: string;
   private readonly sessionDays: number;
+  private readonly adminEmails: Set<string>;
 
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
@@ -36,6 +43,12 @@ export class AuthService {
   ) {
     this.cookieName = config.get("SESSION_COOKIE_NAME", "storyloom_session");
     this.sessionDays = Number(config.get("SESSION_TTL_DAYS", "30"));
+    this.adminEmails = new Set(
+      config.get("ADMIN_EMAILS", "")
+        .split(",")
+        .map((email: string) => email.trim().toLowerCase())
+        .filter(Boolean),
+    );
   }
 
   get sessionCookieName() {
@@ -57,7 +70,7 @@ export class AuthService {
       const created = await client.query<UserRow>(
         `INSERT INTO users (email, display_name, password_hash)
          VALUES ($1, $2, $3)
-         RETURNING id, email, display_name, password_hash, email_verified_at`,
+         RETURNING id, email, display_name, password_hash, email_verified_at, role`,
         [email, parsed.data.displayName, passwordHash],
       );
       await client.query(
@@ -71,6 +84,30 @@ export class AuthService {
     console.info(`[dev-mail] ${email} 的邮箱验证码：${code}`);
     return {
       user: this.toUser(user),
+      verificationRequired: true,
+      ...(this.config.get("DEV_EXPOSE_VERIFICATION_CODE", "false") === "true"
+        ? { devVerificationCode: code }
+        : {}),
+    };
+  }
+
+  async resendVerification(input: unknown) {
+    const parsed = z.object({ email: z.string().trim().email("请输入有效邮箱") }).safeParse(input);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues[0]?.message);
+    const email = parsed.data.email.toLowerCase();
+    const result = await this.database.query<UserRow>("SELECT * FROM users WHERE email = $1", [email]);
+    const user = result.rows[0];
+    if (!user) throw new BadRequestException("该邮箱尚未注册");
+    if (user.email_verified_at) return { verificationRequired: false };
+
+    const code = String(randomInt(100000, 1000000));
+    await this.database.query(
+      `INSERT INTO email_verification_codes (user_id, code_hash, expires_at)
+       VALUES ($1, $2, now() + interval '15 minutes')`,
+      [user.id, this.hash(code)],
+    );
+    console.info(`[dev-mail] ${email} 的邮箱验证码：${code}`);
+    return {
       verificationRequired: true,
       ...(this.config.get("DEV_EXPOSE_VERIFICATION_CODE", "false") === "true"
         ? { devVerificationCode: code }
@@ -118,9 +155,9 @@ export class AuthService {
     await this.database.query(
       `INSERT INTO sessions (user_id, token_hash, expires_at)
        VALUES ($1, $2, now() + ($3 || ' days')::interval)`,
-      [user.id, this.hash(token), this.sessionDays],
+      [user.id, this.hash(token), parsed.data.remember ? this.sessionDays : 1],
     );
-    return { user: this.toUser(user), token, maxAgeMs: this.sessionDays * 86400000 };
+    return { user: this.toUser(user), token, maxAgeMs: (parsed.data.remember ? this.sessionDays : 1) * 86400000 };
   }
 
   async logout(token?: string) {
@@ -150,6 +187,7 @@ export class AuthService {
       email: row.email,
       displayName: row.display_name,
       emailVerified: Boolean(row.email_verified_at),
+      role: row.role === "admin" || this.adminEmails.has(row.email.toLowerCase()) ? "admin" : "user",
     };
   }
 }

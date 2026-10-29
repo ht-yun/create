@@ -1,12 +1,21 @@
 import Link from "next/link";
-import { BookOpen, Home, Library, PenTool, Settings, Sparkles, Trophy, UserRound } from "lucide-react";
+import { BookOpen, Home, Library, MessageCircle, MoreHorizontal, PenTool, Sparkles, Trophy } from "lucide-react";
 import type { ReactNode } from "react";
+import { AccountNav } from "./account-nav";
 
 const navItems = [
   { key: "home", href: "/", label: "首页", icon: Home },
   { key: "workshop", href: "/workshop", label: "创意工坊", icon: Sparkles },
+  { key: "community", href: "/community", label: "社区", icon: MessageCircle },
   { key: "rankings", href: "/rankings", label: "排行榜", icon: Trophy },
   { key: "studio", href: "/studio", label: "创作中心", icon: PenTool },
+];
+
+const mobileNavItems = [
+  navItems[0],
+  navItems[1],
+  navItems[2],
+  { key: "more", href: "/rankings", label: "更多", icon: MoreHorizontal },
 ];
 
 export function Brand() {
@@ -41,17 +50,16 @@ export function AppShell({ active, children }: { active?: string; children: Reac
         </div>
         <div className="sidebar-spacer" />
         <nav className="secondary-nav" aria-label="账户导航">
-          <Link href="/settings" className={active === "settings" ? "active" : ""}><Settings size={18} /><span>设置</span></Link>
-          <Link href="/auth"><UserRound size={18} /><span>登录 / 注册</span></Link>
+          <AccountNav active={active} />
         </nav>
         <div className="sidebar-quote"><BookOpen size={16} /><p>每一次选择，<br />都让故事长出新的枝叶。</p></div>
       </aside>
       <div className="mobile-header"><Brand /><Link href="/studio" aria-label="创作中心"><PenTool size={20} /></Link></div>
       <main className="main-content">{children}</main>
       <nav className="mobile-nav" aria-label="移动端主导航">
-        {navItems.slice(0, 4).map((item) => {
+        {mobileNavItems.map((item) => {
           const Icon = item.icon;
-          return <Link key={item.key} href={item.href} className={active === item.key ? "active" : ""}><Icon size={19} /><span>{item.label.replace("创意", "")}</span></Link>;
+          return <Link key={item.key} href={item.href} className={active === item.key || (item.key === "more" && (active === "rankings" || active === "studio")) ? "active" : ""}><Icon size={19} /><span>{item.label}</span></Link>;
         })}
       </nav>
     </div>

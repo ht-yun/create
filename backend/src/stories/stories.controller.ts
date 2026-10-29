@@ -82,6 +82,12 @@ export class StoriesController {
     response.send(exported.data);
   }
 
+  @Get("edit/:id")
+  @UseGuards(SessionGuard)
+  edit(@Param("id") id: string, @Req() request: AuthenticatedRequest) {
+    return this.stories.getById(id, request.user);
+  }
+
   @Get("assets/:id")
   async asset(@Param("id") id: string, @Res() response: Response) {
     const asset = await this.packages.readAsset(id);

@@ -3,8 +3,18 @@ import { rainVisitorGraph } from "@/backend/src/stories/sample-stories";
 import { mistCatchGraph } from "./mist-catch-story";
 import { eveningBreezeWebGraph } from "./evening-breeze-web-story";
 import { afterSchoolWindGraph } from "./after-school-wind-story";
+import { homeSafetySupplementStories } from "./home-safety-supplement-stories";
+import { homeSafetyOriginalStories } from "./home-safety-original-stories";
+import { legalLoanPausedGraph } from "./legal-loan-paused-story";
 
 const updatedAt = "2026-07-16T08:00:00.000Z";
+
+function firstImageUrl(story: StoryDetail) {
+  return story.graph.nodes
+    .flatMap((node) => node.media ?? [])
+    .find((media) => media.kind === "image")?.playbackUrl
+    ?? story.graph.nodes.flatMap((node) => node.media ?? []).find((media) => media.kind === "image")?.url;
+}
 
 export const demoStories: StoryDetail[] = [
   {
@@ -57,7 +67,7 @@ export const demoStories: StoryDetail[] = [
     playCount: 0,
     score: 0,
     updatedAt,
-    coverUrl: "/story-assets/after-school-wind/%E6%99%9A%E8%87%AA%E4%B9%A0%E5%90%8E%E7%9A%84%E9%A3%8E.png",
+    coverUrl: "/story-assets/optimized/after-school-wind/%E6%99%9A%E8%87%AA%E4%B9%A0%E5%90%8E%E7%9A%84%E9%A3%8E.webp",
     graph: afterSchoolWindGraph,
   },
   {
@@ -78,6 +88,25 @@ export const demoStories: StoryDetail[] = [
     coverUrl: "/story-assets/optimized/mist-catch/%E3%80%8A%E9%9B%BE%E6%B8%AF%E8%BF%BD%E6%8D%95%EF%BC%9A%E6%9C%80%E5%90%8E%E4%B8%80%E7%9B%8F%E7%81%AF%E3%80%8B.webp",
     graph: mistCatchGraph,
   },
+  {
+    id: "demo-legal-loan-paused",
+    slug: "legal-loan-paused",
+    title: "那张“只差点一下”的借条",
+    summary: "父亲住院急需周转，林晚遇到一笔“秒到账”的网络借款。核对费用、验证码与个人信息权限，每一步选择都关系到她如何保护自己。",
+    authorName: "折枝编辑部",
+    tags: ["法律科普", "借贷", "个人信息保护", "多结局"],
+    visibility: "public",
+    status: "published",
+    estimatedMinutes: 5,
+    endingCount: 3,
+    favoriteCount: 0,
+    playCount: 0,
+    score: 0,
+    updatedAt,
+    graph: legalLoanPausedGraph,
+  },
+  ...homeSafetySupplementStories,
+  ...homeSafetyOriginalStories,
 ];
 
 export const extraDemoStories: StorySummary[] = [
@@ -104,6 +133,6 @@ export const extraDemoStories: StorySummary[] = [
 ];
 
 export const allDemoSummaries: StorySummary[] = [
-  ...demoStories.map((story) => ({ id: story.id, slug: story.slug, title: story.title, summary: story.summary, authorName: story.authorName, coverUrl: story.coverUrl, tags: story.tags, visibility: story.visibility, status: story.status, estimatedMinutes: story.estimatedMinutes, endingCount: story.endingCount, favoriteCount: story.favoriteCount, playCount: story.playCount, score: story.score, updatedAt: story.updatedAt })),
+  ...demoStories.map((story) => ({ id: story.id, slug: story.slug, title: story.title, summary: story.summary, authorName: story.authorName, coverUrl: story.coverUrl ?? firstImageUrl(story), tags: story.tags, visibility: story.visibility, status: story.status, estimatedMinutes: story.estimatedMinutes, endingCount: story.endingCount, favoriteCount: story.favoriteCount, playCount: story.playCount, score: story.score, updatedAt: story.updatedAt })),
   ...extraDemoStories,
 ];

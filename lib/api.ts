@@ -20,7 +20,13 @@ export async function getStories(): Promise<StorySummary[]> {
     const response = await fetchFromApi(`${API_URL}/stories`, { next: { revalidate: 60 } });
     if (!response.ok) throw new Error(`API ${response.status}`);
     const stories = await response.json() as StorySummary[];
-    return stories.length ? [...stories, ...allDemoSummaries.filter((demo) => !stories.some((story) => story.slug === demo.slug))] : allDemoSummaries;
+    if (!stories.length) return allDemoSummaries;
+    const demoBySlug = new Map(allDemoSummaries.map((story) => [story.slug, story]));
+    const enrichedStories = stories.map((story) => ({
+      ...story,
+      coverUrl: story.coverUrl ?? demoBySlug.get(story.slug)?.coverUrl,
+    }));
+    return [...enrichedStories, ...allDemoSummaries.filter((demo) => !stories.some((story) => story.slug === demo.slug))];
   } catch {
     return allDemoSummaries;
   }
